@@ -1,8 +1,8 @@
 use std::io;
 use std::collections::HashMap;
 
-use proc_macro2::TokenStream;
-use quote::TokenStreamExt;
+use proc_macro2::{TokenStream, Ident, Span};
+//use quote::TokenStreamExt;
 
 #[derive(Clone, Debug)]
 pub enum BTNodeType {
@@ -18,6 +18,19 @@ pub struct BTNode {
     pub node_type: BTNodeType,
     pub name: String,
     pub parent: Option<String>,
+}
+
+impl BTNode {
+    pub fn get_ident(&self) -> String
+    {
+        match self.node_type {
+            BTNodeType::Root(_) => format!("root"),
+            BTNodeType::Sequence(_) => format!("sequence_{}", self.name),
+            BTNodeType::Fallback(_) => format!("fallback_{}", self.name),
+            BTNodeType::Action => format!("action_{}", self.name),
+            BTNodeType::Condition => format!("condition_{}", self.name),
+        }
+    }
 }
 
 pub type BTGraph = BTNodeType;
@@ -62,9 +75,11 @@ pub fn bt_from_nodes(nodes: &Vec<BTNode>) -> Result<BTGraph, io::Error>
 
 fn action_node_to_ast(name: &str) -> TokenStream
 {
+    let token_name = Ident::new(name, Span::call_site());
+
     let tokens = quote! {
         
-        async fn action_#name() -> bool
+        pub async fn #token_name() -> bool
         {
             println!("Stepping through {}...", #name);
 
@@ -97,7 +112,7 @@ fn bt_node_to_action_asts(node: &BTNode) -> HashMap<String, TokenStream>
             }
         },
         _ => {
-            asts.insert(node.name.clone(), action_node_to_ast(&node.name));
+            asts.insert(node.get_ident(), action_node_to_ast(&node.get_ident()));
         },
     }
 
@@ -117,14 +132,13 @@ pub fn bt_to_action_asts(bt: &BTGraph) -> HashMap<String, TokenStream>
 
 fn root_node_to_ast(node: &BTNode) -> TokenStream
 {
-    let name = node.name.clone();
+    //let name = node.name.clone();
+    let name = Ident::new(&node.get_ident(), Span::call_site());
 
     let tokens = quote! {
         
-        async fn action_#name() -> bool
+        pub async fn  #name() -> bool
         {
-            println!("Stepping through {}...", #name);
-
             return true;
         }
 
@@ -135,15 +149,19 @@ fn root_node_to_ast(node: &BTNode) -> TokenStream
 
 fn sequence_node_to_ast(node: &BTNode) -> TokenStream
 {
-    let name = node.name.clone();
+    let print_name = node.name.clone();
+    let name = Ident::new(&node.get_ident(), Span::call_site());
 
     let mut parts = TokenStream::new();
 
     if let BTNodeType::Sequence(ref s) = node.node_type {
         for child in s {
-            let name = &child.name;
+            //let name = &child.name;
+            let name = Ident::new(&child.get_ident(), Span::call_site());
             let part = quote! {
-                r#await! #name;
+                if ! await!(#name()) {
+                    return false;
+                }
             };
             parts.extend(part);
         }
@@ -151,9 +169,9 @@ fn sequence_node_to_ast(node: &BTNode) -> TokenStream
 
     let tokens = quote! {
         
-        async fn action_#name() -> bool
+        pub async fn #name() -> bool
         {
-            println!("Stepping through {}...", #name);
+            println!("Stepping through {}...", #print_name);
 
             #parts
 
@@ -167,15 +185,18 @@ fn sequence_node_to_ast(node: &BTNode) -> TokenStream
 
 fn fallback_node_to_ast(node: &BTNode) -> TokenStream
 {
-    let name = node.name.clone();
+    //let name = node.name.clone();
+    let print_name = node.name.clone();
+    let name = Ident::new(&node.get_ident(), Span::call_site());
 
     let mut parts = TokenStream::new();
 
     if let BTNodeType::Fallback(ref f) = node.node_type {
         for child in f {
-            let name = &child.name;
+            //let name = &child.name;
+            let name = Ident::new(&child.get_ident(), Span::call_site());
             let part = quote! {
-                if (r#await! #name()) {
+                if await!(#name()) {
                     return true;
                 }
             };
@@ -185,13 +206,13 @@ fn fallback_node_to_ast(node: &BTNode) -> TokenStream
 
     let tokens = quote! {
         
-        async fn action_#name() -> bool
+        pub async fn #name() -> bool
         {
-            println!("Stepping through {}...", #name);
+            println!("Stepping through {}...", #print_name);
 
             #parts
 
-            return true;
+            return false;
         }
 
     };
@@ -228,10 +249,44 @@ fn bt_node_to_ast(node: &BTNode) -> TokenStream
     return asts;
 }
 
+fn bt_node_to_imports(node: &BTNode) -> TokenStream
+{
+    let mut asts = TokenStream::new();
+
+    match node.node_type {
+        BTNodeType::Root(ref r) => {
+            if let Some(child) = r {
+                asts.extend(bt_node_to_imports(&child));
+            }
+        },
+        BTNodeType::Sequence(ref s) => {
+            for child in s {
+                asts.extend(bt_node_to_imports(child));
+            }
+        },
+        BTNodeType::Fallback(ref f) => {
+            for child in f {
+                asts.extend(bt_node_to_imports(child));
+            }
+        },
+        _ => {
+            let name = Ident::new(&node.get_ident(), Span::call_site());
+            let tokens = quote! {
+                use crate::#name::#name;
+            };
+            asts.extend(tokens);
+        },
+    }
+
+    return asts;
+}
+
 pub fn bt_to_ast(bt: &BTGraph) -> TokenStream
 {
     if let BTNodeType::Root(Some(ref node)) = bt {
-        return bt_node_to_ast(node);
+        let mut tokens = bt_node_to_imports(node);
+        tokens.extend(bt_node_to_ast(node));
+        return tokens;
     }
     else {
         return TokenStream::new();

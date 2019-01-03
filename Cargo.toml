@@ -8,6 +8,7 @@ edition = "2018"
 lalrpop = "0.16.2"
 
 [dependencies]
+clap = "2.32.0"
 lalrpop-util = "0.16.2"
 regex = "0.2.1"
 quote = "0.6"
