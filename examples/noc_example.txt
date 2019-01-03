@@ -1,0 +1,12 @@
+Root root # mandatory to have root?
+Fallback f1 -> root # we can not really do anything about fallbacks
+Sequence s1 -> f1 # or about sequences
+Action a1, a2, a3, a4 -> s1 # Multiple children means we can do anything
+Action a5, a6, a7, a8 -> f1 # ibid
+Action a9 -> f1 # this is not interesting : publish "/hello" 42
+Condition c1 -> f1 #: topic "/battery_good" == True
+Condition c2 -> f1 #: param "/all_good" == True
+
+# How would a grammar look for this?
+# (type) (one or many vars separated by commas) "->" (zero or one one parent) optional ":"+statement
+# How to write this in lalrpop?

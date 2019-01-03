@@ -1,0 +1,36 @@
+use std::str::FromStr;
+use std::collections::HashMap;
+use crate::bt::{BTNode, BTNodeType};
+
+grammar;
+
+pub Nodes: Vec<BTNode> = {
+    <l:Declaration> <r:Comment> => l,
+    Comment => Vec::new(),
+};
+
+pub Declaration: Vec<BTNode> = {
+    <v1:Type> <v2:Names> "->" <v3:Name> => v2.iter().map(|n| BTNode{node_type: v1.clone(), name: n.clone(), parent: Some(v3.clone())}).collect(),
+    <v1:Type> <v2:Name> => vec![BTNode{node_type: v1, name: v2, parent: None}],
+};
+
+Type: BTNodeType = {
+    "Root" => BTNodeType::Root(None),
+    "Sequence" => BTNodeType::Sequence(Vec::new()),
+    "Fallback" => BTNodeType::Fallback(Vec::new()),
+    "Action" => BTNodeType::Action,
+    "Condition" => BTNodeType::Condition,
+};
+
+Names: Vec<String> = {
+    <l:Names> "," <r:Name> => {let mut ll = l.clone(); ll.push(r); ll},
+    Name => vec![<>],
+};
+
+Name: String = {
+    r"[a-zA-Z0-9]+" => String::from(<>)
+};
+
+Comment: () = {
+    r"#(.*)" => ()
+}
