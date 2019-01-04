@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use std::collections::HashMap;
-use crate::bt::{BTNode, BTNodeType};
+use crate::bt_generator::{BTNode, BTNodeType};
 
 grammar;
 

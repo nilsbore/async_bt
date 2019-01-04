@@ -1,5 +1,6 @@
 #![feature(drain_filter)]
 #![feature(await_macro, async_await, futures_api)]
+#![feature(pin)]
 
 #[macro_use] extern crate lalrpop_util;
 
@@ -17,9 +18,17 @@ extern crate clap;
 
 use clap::{App, Arg}; 
 
-pub mod bt;
+extern crate futures;
 
-use crate::bt::{bt_from_nodes, bt_to_action_asts, bt_to_ast};
+pub mod bt_generated;
+pub mod bt_generator;
+pub mod bt_runtime;
+
+use crate::bt_generator::{bt_from_nodes, bt_to_action_asts, bt_to_ast};
+
+use crate::bt_runtime::run_bt;
+
+use crate::bt_generated::bt_logic::fallback_f1;
 
 lalrpop_mod!(pub bt_parser); // synthesized by LALRPOP
 
@@ -91,6 +100,10 @@ fn main() -> Result<(), std::io::Error>
         let s: String = ast.to_string();
         f.write_all(s.as_bytes()).expect("Unable to write to file");
     }
+
+    let mut tree = fallback_f1();
+
+    let value = run_bt(tree);
 
      return Ok(())
 }
